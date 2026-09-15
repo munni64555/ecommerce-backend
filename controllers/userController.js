@@ -9,6 +9,7 @@ export const registerUser = async (req, res) => {
   try {
     const { name, email, mobile, password } = req.body;
 
+    // Empty field check
     if (!name || !email || !mobile || !password) {
       return res.status(400).json({
         success: false,
@@ -16,8 +17,11 @@ export const registerUser = async (req, res) => {
       });
     }
 
+    const formattedEmail = email.toLowerCase().trim();
+
+    // Check existing user
     const oldUser = await User.findOne({
-      email: email.toLowerCase(),
+      email: formattedEmail,
     });
 
     if (oldUser) {
@@ -27,16 +31,19 @@ export const registerUser = async (req, res) => {
       });
     }
 
+    // Password hash
     const hashPassword = await bcrypt.hash(password, 10);
 
+    // Save user in MongoDB Atlas
     const user = await User.create({
-      name,
-      email: email.toLowerCase(),
-      mobile,
+      name: name.trim(),
+      email: formattedEmail,
+      mobile: mobile.trim(),
       password: hashPassword,
     });
 
-    res.status(201).json({
+
+    return res.status(201).json({
       success: true,
       message: "User Registered Successfully",
       data: {
@@ -47,7 +54,8 @@ export const registerUser = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({
+
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -67,8 +75,11 @@ export const loginUser = async (req, res) => {
       });
     }
 
+    const formattedEmail = email.toLowerCase().trim();
+
+    // Find user
     const user = await User.findOne({
-      email: email.toLowerCase(),
+      email: formattedEmail,
     });
 
     if (!user) {
@@ -78,6 +89,7 @@ export const loginUser = async (req, res) => {
       });
     }
 
+    // Compare password
     const isPasswordCorrect = await bcrypt.compare(
       password,
       user.password
@@ -90,13 +102,7 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    if (!process.env.JWT_SECRET) {
-      return res.status(500).json({
-        success: false,
-        message: "JWT secret is not configured",
-      });
-    }
-
+    // Create JWT token
     const token = jwt.sign(
       {
         id: user._id,
@@ -108,7 +114,7 @@ export const loginUser = async (req, res) => {
       }
     );
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Login Successfully",
       token,
@@ -120,7 +126,9 @@ export const loginUser = async (req, res) => {
       },
     });
   } catch (error) {
-    res.status(500).json({
+    console.log("LOGIN ERROR:", error);
+
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -133,7 +141,6 @@ export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
 
-    // Email check
     if (!email) {
       return res.status(400).json({
         success: false,
@@ -141,9 +148,11 @@ export const forgotPassword = async (req, res) => {
       });
     }
 
-    // Find user
+    const formattedEmail = email.toLowerCase().trim();
+
+    // Find registered user
     const user = await User.findOne({
-      email: email.toLowerCase(),
+      email: formattedEmail,
     });
 
     if (!user) {
@@ -159,11 +168,9 @@ export const forgotPassword = async (req, res) => {
     ).toString();
 
     // OTP valid for 30 seconds
-    const otpExpiry = new Date(
-      Date.now() + 30 * 1000
-    );
+    const otpExpiry = new Date(Date.now() + 30 * 1000);
 
-    // Hash OTP before saving
+    // Hash OTP
     const hashedOtp = await bcrypt.hash(otp, 10);
 
     user.otp = hashedOtp;
@@ -171,56 +178,42 @@ export const forgotPassword = async (req, res) => {
 
     await user.save();
 
+    // Check email configuration
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      return res.status(500).json({
+        success: false,
+        message: "Email service is not configured",
+      });
+    }
+
     // Gmail transporter
     const transporter = nodemailer.createTransport({
       service: "gmail",
-
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
       },
     });
 
-    // Send OTP email
+    // Send OTP
     await transporter.sendMail({
       from: `"Exclusive" <${process.env.EMAIL_USER}>`,
-
       to: user.email,
-
       subject: "Exclusive - Password Reset OTP",
-
       html: `
-        <div
-          style="
-            font-family: Arial, sans-serif;
-            max-width: 500px;
-            margin: auto;
-            padding: 20px;
-          "
-        >
+        <div style="font-family: Arial, sans-serif; padding: 20px;">
           <h2>Password Reset OTP</h2>
 
           <p>
-            Use the following OTP to reset your
-            Exclusive account password:
+            Use the following OTP to reset your password:
           </p>
 
-          <h1
-            style="
-              letter-spacing: 8px;
-              font-size: 32px;
-            "
-          >
+          <h1 style="letter-spacing: 8px;">
             ${otp}
           </h1>
 
           <p>
             This OTP is valid for 30 seconds.
-          </p>
-
-          <p>
-            If you did not request this OTP,
-            please ignore this email.
           </p>
         </div>
       `,
@@ -232,12 +225,15 @@ export const forgotPassword = async (req, res) => {
       expirySeconds: 30,
     });
   } catch (error) {
+
+
     return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
+
 // ================= Verify OTP =================
 
 export const verifyOtp = async (req, res) => {
@@ -251,8 +247,10 @@ export const verifyOtp = async (req, res) => {
       });
     }
 
+    const formattedEmail = email.toLowerCase().trim();
+
     const user = await User.findOne({
-      email: email.toLowerCase(),
+      email: formattedEmail,
     });
 
     if (!user) {
@@ -269,7 +267,7 @@ export const verifyOtp = async (req, res) => {
       });
     }
 
-    // Check OTP expiry
+    // Check expiry
     if (user.otpExpiry.getTime() < Date.now()) {
       user.otp = null;
       user.otpExpiry = null;
@@ -282,7 +280,7 @@ export const verifyOtp = async (req, res) => {
       });
     }
 
-    // Compare entered OTP with hashed OTP
+    // Compare OTP
     const isOtpCorrect = await bcrypt.compare(
       otp.toString(),
       user.otp
@@ -299,8 +297,8 @@ export const verifyOtp = async (req, res) => {
       success: true,
       message: "OTP verified successfully",
     });
-
   } catch (error) {
+
     return res.status(500).json({
       success: false,
       message: error.message,

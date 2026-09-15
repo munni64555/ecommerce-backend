@@ -11,15 +11,33 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Database
+
+// =========================
+// DATABASE
+// =========================
+
 dbconnect();
 
-// Routes
+
+// =========================
+// ROUTES
+// =========================
+
 app.use("/api/user", userRoute);
+
+
+// =========================
+// TEST ROUTE
+// =========================
 
 app.get("/", (req, res) => {
   res.send("Backend Running Successfully 🚀");
 });
+
+
+// =========================
+// SERVER
+// =========================
 
 const PORT = process.env.PORT || 8000;
 
